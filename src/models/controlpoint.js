@@ -18,18 +18,19 @@ const ControlPoint = sequelize.define('ControlPoint', {
         key: 'id_sdom'
       }
     },
+    poids_cp: {
+      type: DataTypes.FLOAT,
+      allowNull: false 
+    },
     score_cp: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.FLOAT,
       allowNull: true // Will be filled based on evaluation
     },
     criticalityLevel: {
       type: DataTypes.STRING,
       allowNull: true // Will be filled based on evaluation
     },
-    recommendations: {
-      type: DataTypes.TEXT,
-      allowNull: true // Will be filled based on evaluation
-    }
+  
   });
   
   module.exports = ControlPoint;

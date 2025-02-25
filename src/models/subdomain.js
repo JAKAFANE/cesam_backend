@@ -24,7 +24,7 @@ const SubDomain = sequelize.define('SubDomain', {
     },  // Average score from control points
     weight: { 
       type: DataTypes.FLOAT, 
-      defaultValue: 1.0 
+      defaultValue: 0.1 
     },  // Relative importance in the domain
     criticality: { 
       type: DataTypes.STRING, 

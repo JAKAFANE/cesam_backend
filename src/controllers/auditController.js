@@ -86,8 +86,8 @@ router.get("/subdomains/:domainId", async (req, res) => {
 // Create a new control point under a sub-domain
 router.post("/controlpoints", async (req, res) => {
   try {
-    const { name, subDomainId } = req.body;
-    const controlPoint = await ControlPoint.create({ name_cp: name, subDomainId:subDomainId });
+    const { name, subDomainId, poids } = req.body;
+    const controlPoint = await ControlPoint.create({ name_cp: name, subDomainId:subDomainId, poids_cp: poids });
     res.status(201).json(controlPoint);
   } catch (error) {
     console.error("Error creating control point:", error);
@@ -131,30 +131,348 @@ router.get("/questions/:controlPointId", async (req, res) => {
   }
 });
 
+//EDIT WEIGHT
+
+router.put("/updateWeight", async (req, res) => {
+  try {
+    
+    const { id,weight } = req.body;
+
+    const domain = await Domain.findByPk(id);
+    if (!domain) {
+      return res.status(404).json({ error: "domain not found" });
+    }
+
+    await domain.update({ weight:weight });
+    return res.status(200).json({ message: "domain updated successfully" });
+  } catch (error) {
+    console.error("Error updating domain:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 /**
  * @route POST /api/audit/start-evaluation
  * @desc Start a new evaluation for a control point
  */
 router.post("/collectanswer", async (req, res) => {
-  try {
-    const { subjectId, questionId, answer } = req.body;
 
-    const evaluation = await Evaluation.create({
-      subjectId: subjectId,
-      questionId: questionId,
-      answer: answer,
-    });
+  try {
+
+    // console.log("Reçu dans req.body:", req.body);
+    // console.log(req.body[0])
+    const evaluations  = req.body;
+
+    console.log(evaluations[0])
+    
+    if (!Array.isArray(evaluations) || evaluations.some(e => !("subjectId" in e) || !("questionId" in e) || !("answer" in e))) {
+      return res.status(400).json({ message: "Format invalide. Attendu: [{ subjectId, questionId, answer }]" });
+    };
+
+    for (const evalSub of evaluations) {
+      await Evaluation.upsert(evalSub)
+    }
 
     return res.status(201).json({
-      message: `The answer of subject ${subjectId} registered successfully`,
-      evaluation,
+      message: `The answer of subject registered successfully`
+      
     });
   } catch (error) {
     console.error("Error registering answer:", error);
     return res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// router.post("/evalIndiv", async (req, res) => {
+
+//   try {
+//     const { subjectId } = req.body;
+
+//     // Récupérer les évaluations
+//     const evaluations = await Evaluation.findAll({ where: { subjectId: subjectId } });
+//     if (evaluations.length === 0) return res.status(404).json({ message: "Aucune évaluation trouvée" });
+
+//     // Calcul du score
+//     const totalQuestions = evaluations.length;
+//     const totalOui = evaluations.filter((e) => e.answer === true).length;
+
+//     console.log(totalQuestions);
+//     console.log(totalOui);
+
+//     const score = (totalOui / totalQuestions) * 100;
+
+//     return res.json({ subjectId: subjectId, score:score });
+//   } catch (error) {
+//     return res.status(500).json({ error: error.message });
+//   }
+
+// });
+
+const scoreSujet = async (subjectId, controlPointId) => {
+
+  const questions = await Question.findAll({where: {controlPointId: controlPointId}, attributes: ["id_qst"]})
+
+  const questionIds = questions.map(q => q.id_qst)
+
+  if (questionIds.length === 0) {
+    return 0
+  }
+
+  const totalQuestions = await Evaluation.count({ where: {subjectId: subjectId, questionId: questionIds}});
+  const totalOui = await Evaluation.count({ where : { subjectId: subjectId,questionId:questionIds, answer: true}});
+
+  // console.log(`nombre de question ${totalQuestions}`)
+  // console.log(`nombre de oui ${totalOui}`)
+
+  if (totalQuestions === 0 ) return 0;
+
+  return totalOui/totalQuestions;
+  
+};
+
+const determinerCriticite = (score) => {
+  if (score < 0 || score > 1) {
+    throw new Error("Le score doit être compris entre 0 et 1.");
+  }
+
+  let niveau;
+
+  switch (true) {
+    case (score === 1):
+      niveau = "Optimisé (Niveau 5)";
+      break;
+    case (score >= 0.95):
+      niveau = "Excellence (Niveau 4.7)";
+      break;
+    case (score >= 0.90):
+      niveau = "Géré quantitativement avancé (Niveau 4.3)";
+      break;
+    case (score >= 0.85):
+      niveau = "Géré quantitativement (Niveau 4.0)";
+      break;
+    case (score >= 0.75):
+      niveau = "Défini avancé (Niveau 3.7)";
+      break;
+    case (score >= 0.65):
+      niveau = "Défini (Niveau 3.3)";
+      break;
+    case (score >= 0.55):
+      niveau = "Défini initial (Niveau 3.0)";
+      break;
+    case (score >= 0.45):
+      niveau = "Géré avancé (Niveau 2.7)";
+      break;
+    case (score >= 0.35):
+      niveau = "Géré (Niveau 2.3)";
+      break;
+    case (score >= 0.25):
+      niveau = "Géré initial (Niveau 2.0)";
+      break;
+    case (score >= 0.15):
+      niveau = "Initial avancé (Niveau 1.7)";
+      break;
+    case (score >= 0.05):
+      niveau = "Initial (Niveau 1.3)";
+      break;
+    case (score > 0):
+      niveau = "Très faible (Niveau 1.0)";
+      break;
+    default:
+      niveau = "Critique (Niveau 0)";
+  }
+
+  return niveau;
+};
+
+
+router.post("/evalPointControl", async (req, res) => {
+  try {
+    const alpha = 5;
+    const {controlPointId} = req.body;
+
+    const questions = await Question.findAll({where: {controlPointId: controlPointId}, attributes: ["id_qst"]})
+
+    const questionIds = questions.map(q => q.id_qst)
+
+    questionIds.forEach(i => {
+      console.log(i)
+    })
+
+    if (questionIds.length === 0) {
+      return 0
+    }
+
+    const evaluations = await Evaluation.findAll({
+      where: {questionId: questionIds}
+    })
+
+    if (evaluations.length === 0) {
+      return 0
+    }
+
+    const subjectIds = [...new Set(evaluations.map(e => e.subjectId))]
+
+    const scores = await Promise.all(subjectIds.map(id => scoreSujet(id, controlPointId)));
+    scores.forEach((e) => {
+      console.log(`le sujet a un P_i de ${e}`)
+    } )
+
+    let sumScore = 0
+
+    scores.forEach((sco) => {
+      sumScore += sco
+    })
+
+    let P_sys = sumScore / subjectIds.length
+
+    let sumSqrt = 0
+
+    scores.forEach((sco) => {
+      sumSqrt = sumSqrt + Math.pow((sco - P_sys), 2)
+    })
+
+    let variance = sumSqrt / subjectIds.length
+
+    let dispersion = Math.sqrt(variance)
+
+    let ScorePtCtrl = dispersion === 0 ? P_sys : P_sys* Math.exp(-alpha*dispersion)
+    // console.log(` P_sys ${P_sys}`)
+    // console.log(` variance ${variance}`)
+    // console.log(` dispersion ${dispersion}`)
+    // console.log(` score pt_ctrl ${ScorePtCtrl}`)
+
+    const criticality = determinerCriticite(ScorePtCtrl)
+    console.log(`criticité ${criticality}`)
+
+    await ControlPoint.update({score_cp: ScorePtCtrl, criticalityLevel: criticality}, {where:{id_cp: controlPointId}})
+    
+    return res.status(200).json({
+      message: `Le score du point de Controle ${controlPointId} est ${ScorePtCtrl.toFixed(2)}`,
+    })
+  } catch (error) {
+    console.error("Erreur lors de l'évaluation du point de contrôle :", error);
+    return null;
+  }
+});
+
+router.post("/evalSubDomain", async (req, res) => {
+  try {
+    
+    const {subDomainId} = req.body;
+
+    const controlpoints = await ControlPoint.findAll({where: {subDomainId: subDomainId}, attributes: ["id_cp","poids_cp", "score_cp"]})
+
+    if (controlpoints.length === 0) {return 0} ;
+
+    let sommePonderee = 0;
+    let sommePoids = 0; 
+
+
+    controlpoints.forEach(({poids_cp : poids, score_cp: score}) => {
+      if (poids !== null && score !== null){
+        sommePonderee += score*poids;
+        sommePoids += poids;
+      }
+    });
+
+    if (sommePoids === 0) {return 0};
+
+    let ScoreSubDomain = sommePonderee / sommePoids; 
+
+    const criticality = determinerCriticite(ScoreSubDomain)
+    console.log(`criticité ${criticality}`)
+
+    await SubDomain.update({score: ScoreSubDomain, criticality: criticality}, {where:{id_sdom: subDomainId}})
+
+  
+    
+    return res.status(200).json({
+      message: `Le score du sous domaine ${subDomainId} est ${ScoreSubDomain.toFixed(2)}`,
+    })
+  } catch (error) {
+    console.error("Erreur lors de l'évaluation du sous domaine :", error);
+    return null;
+  }
+});
+
+router.post("/evalDomain", async (req, res) => {
+  try {
+    
+    const {domainId} = req.body;
+
+    const subdomains = await SubDomain.findAll({where: {domainId: domainId}, attributes: ["id_sdom","score", "weight"]})
+
+    if (subdomains.length === 0) {return 0} ;
+
+    let sommePonderee = 0;
+    let sommePoids = 0; 
+
+
+    subdomains.forEach(({score : sco, weight: wg}) => {
+      if (sco !== null && wg !== null){
+        sommePonderee += sco*wg;
+        sommePoids += wg;
+      }
+    });
+
+    if (sommePoids === 0) {return 0};
+
+    let ScoreDomain = sommePonderee / sommePoids; 
+
+    const criticality = determinerCriticite(ScoreDomain)
+    console.log(`criticité ${criticality}`)
+
+    await Domain.update({score: ScoreDomain, criticality: criticality}, {where:{id_dom: domainId}})
+
+  
+    
+    return res.status(200).json({
+      message: `Le score du domaine ${domainId} est ${ScoreDomain.toFixed(2)}`,
+    })
+  } catch (error) {
+    console.error("Erreur lors de l'évaluation du domaine :", error);
+    return null;
+  }
+});
+
+router.post("/evalBranch", async (req, res) => {
+  try {
+    
+    const {branchId} = req.body;
+
+    const domains = await Domain.findAll({where: {branchId: branchId}, attributes: ["id_dom","score", "weight"]})
+
+    if (domains.length === 0) {return 0} ;
+
+    let sommePonderee = 0;
+    let sommePoids = 0; 
+
+
+    domains.forEach(({score : sco, weight: wg}) => {
+      if (sco !== null && wg !== null){
+        sommePonderee += sco*wg;
+        sommePoids += wg;
+      }
+    });
+
+    if (sommePoids === 0) {return 0};
+
+    let ScoreBranch = sommePonderee / sommePoids; 
+
+    await Branch.update({score: ScoreBranch}, {where:{id_br: branchId}})
+
+  
+    
+    return res.status(200).json({
+      message: `Le score de la branche ${branchId} est ${ScoreBranch.toFixed(2)}`,
+    })
+  } catch (error) {
+    console.error("Erreur lors de l'évaluation de la branche :", error);
+    return null;
+  }
+});
+
 
 // /**
 //  * @route POST /api/audit/submit-answers

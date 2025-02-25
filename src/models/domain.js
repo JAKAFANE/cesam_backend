@@ -24,7 +24,7 @@ const Domain = sequelize.define('Domain', {
     },  // Average score from sub-domains
     weight: { 
       type: DataTypes.FLOAT, 
-      defaultValue: 1.0 
+      defaultValue: 0.1 
     },  // Relative importance in the branch
     criticality: { 
       type: DataTypes.STRING, 

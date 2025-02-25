@@ -19,18 +19,18 @@ const Evaluation = sequelize.define("Evaluation", {
       key: 'id_qst',
     }
   },
-  // controlPointId: {
-  //   type: DataTypes.INTEGER,
-  //   allowNull: false,
-  // },
-  // auditorId: {
-  //   type: DataTypes.INTEGER,
-  //   allowNull: false,
-  // },
   answer: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
-});
+},{
+  indexes: [
+    {
+      unique: true,
+      fields: ["subjectId", "questionId"]
+    }
+  ]
+}
+);
 
 module.exports = Evaluation;
