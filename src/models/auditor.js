@@ -1,6 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
-const MissionAssignment = require("./missionAssignment");
+//const MissionAssignment = require("./missionAssignment");
 
 
 const Auditor = sequelize.define("Auditor", {

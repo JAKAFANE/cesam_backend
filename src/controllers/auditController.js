@@ -6,7 +6,11 @@ const {
   SubDomain, 
   ControlPoint, 
   Question, 
-  Evaluation, 
+  EvaluationAnswer, 
+  EvaluationControlPoint,
+  EvaluationSubdomain,
+  EvaluationDomain,
+  EvaluationBranch
 
 } = require("../models");
 
@@ -166,12 +170,12 @@ router.post("/collectanswer", async (req, res) => {
 
     console.log(evaluations[0])
     
-    if (!Array.isArray(evaluations) || evaluations.some(e => !("subjectId" in e) || !("questionId" in e) || !("answer" in e))) {
-      return res.status(400).json({ message: "Format invalide. Attendu: [{ subjectId, questionId, answer }]" });
+    if (!Array.isArray(evaluations) || evaluations.some(e => !("subjectId" in e) || !("questionId" in e) ||  !("missionId" in e) || !("answer" in e))) {
+      return res.status(400).json({ message: "Format invalide. Attendu: [{  subjectId, questionId, missionId, answer }]" });
     };
 
     for (const evalSub of evaluations) {
-      await Evaluation.upsert(evalSub)
+      await EvaluationAnswer.upsert(evalSub)
     }
 
     return res.status(201).json({
@@ -219,8 +223,8 @@ const scoreSujet = async (subjectId, controlPointId) => {
     return 0
   }
 
-  const totalQuestions = await Evaluation.count({ where: {subjectId: subjectId, questionId: questionIds}});
-  const totalOui = await Evaluation.count({ where : { subjectId: subjectId,questionId:questionIds, answer: true}});
+  const totalQuestions = await EvaluationAnswer.count({ where: {subjectId: subjectId, questionId: questionIds}});
+  const totalOui = await EvaluationAnswer.count({ where : { subjectId: subjectId,questionId:questionIds, answer: true}});
 
   // console.log(`nombre de question ${totalQuestions}`)
   // console.log(`nombre de oui ${totalOui}`)
@@ -288,23 +292,19 @@ const determinerCriticite = (score) => {
 
 router.post("/evalPointControl", async (req, res) => {
   try {
-    const alpha = 5;
-    const {controlPointId} = req.body;
+    const alpha = 2;
+    const {controlPointId, missionId} = req.body;
 
     const questions = await Question.findAll({where: {controlPointId: controlPointId}, attributes: ["id_qst"]})
 
     const questionIds = questions.map(q => q.id_qst)
 
-    questionIds.forEach(i => {
-      console.log(i)
-    })
-
     if (questionIds.length === 0) {
       return 0
     }
 
-    const evaluations = await Evaluation.findAll({
-      where: {questionId: questionIds}
+    const evaluations = await EvaluationAnswer.findAll({
+      where: {questionId: questionIds, missionId: missionId}
     })
 
     if (evaluations.length === 0) {
@@ -345,7 +345,7 @@ router.post("/evalPointControl", async (req, res) => {
     const criticality = determinerCriticite(ScorePtCtrl)
     console.log(`criticité ${criticality}`)
 
-    await ControlPoint.update({score_cp: ScorePtCtrl, criticalityLevel: criticality}, {where:{id_cp: controlPointId}})
+    await EvaluationControlPoint.upsert({missionId: missionId, controlPointId:controlPointId, score_cp: ScorePtCtrl, criticality_cp: criticality})
     
     return res.status(200).json({
       message: `Le score du point de Controle ${controlPointId} est ${ScorePtCtrl.toFixed(2)}`,
@@ -359,18 +359,37 @@ router.post("/evalPointControl", async (req, res) => {
 router.post("/evalSubDomain", async (req, res) => {
   try {
     
-    const {subDomainId} = req.body;
+    const {subDomainId, missionId} = req.body;
 
-    const controlpoints = await ControlPoint.findAll({where: {subDomainId: subDomainId}, attributes: ["id_cp","poids_cp", "score_cp"]})
+    const controlpoints = await ControlPoint.findAll({where: {subDomainId: subDomainId}, attributes: ["id_cp","poids_cp" ]})
 
-    if (controlpoints.length === 0) {return 0} ;
+    const controlpointsList = controlpoints.map(c => ({id_cp:c.id_cp, poids_cp: c.poids_cp}))
+    if (controlpointsList.length === 0) {return 0} ;
+
+    const controlpointIds = controlpointsList.map(c => c.id_cp)
+    if (controlpointIds.length === 0) {return 0} ;
+
+    
+
+    const evaluations = await EvaluationControlPoint.findAll({
+      where: {controlPointId: controlpointIds, missionId: missionId}
+    })
+
+    if (evaluations.length === 0) {
+      return 0
+    }
 
     let sommePonderee = 0;
     let sommePoids = 0; 
 
+    const poidsParControlPoint = Object.fromEntries( controlpointsList.map(({id_cp: id_cp, poids_cp: poids_cp}) => [id_cp, poids_cp]));
 
-    controlpoints.forEach(({poids_cp : poids, score_cp: score}) => {
-      if (poids !== null && score !== null){
+
+    evaluations.forEach(({ controlPointId: cpId, score_cp: score}) => {
+      const poids = poidsParControlPoint[cpId];
+
+      if ( score !== null && poids !== undefined) {
+        
         sommePonderee += score*poids;
         sommePoids += poids;
       }
@@ -383,7 +402,7 @@ router.post("/evalSubDomain", async (req, res) => {
     const criticality = determinerCriticite(ScoreSubDomain)
     console.log(`criticité ${criticality}`)
 
-    await SubDomain.update({score: ScoreSubDomain, criticality: criticality}, {where:{id_sdom: subDomainId}})
+    await EvaluationSubdomain.upsert({missionId: missionId, subdomainId:subDomainId, score_sd: ScoreSubDomain, criticality_sd: criticality})
 
   
     
@@ -399,18 +418,33 @@ router.post("/evalSubDomain", async (req, res) => {
 router.post("/evalDomain", async (req, res) => {
   try {
     
-    const {domainId} = req.body;
+    const {domainId, missionId} = req.body;
 
-    const subdomains = await SubDomain.findAll({where: {domainId: domainId}, attributes: ["id_sdom","score", "weight"]})
+    const subdomains = await SubDomain.findAll({where: {domainId: domainId}, attributes: ["id_sdom", "weight"]})
 
     if (subdomains.length === 0) {return 0} ;
+
+    const subdomainsList = subdomains.map(s => ({id_sdom: s.id_sdom, weight: s.weight}))
+    if (subdomainsList.length === 0) {return 0 } ;
+
+    const subdomainIds = subdomainsList.map(s => s.id_sdom)
+    if (subdomainIds.length === 0) {return 0 } ;
+
+    const evaluations = await EvaluationSubdomain.findAll({
+      where: {subDomainId: subdomainIds, missionId: missionId}
+    })
+    if ( evaluations.length === 0) {return 0}
 
     let sommePonderee = 0;
     let sommePoids = 0; 
 
+    const poidsParSubdomain = Object.fromEntries(subdomainsList.map(({id_sdom: id_sdom, weight:weight}) => [id_sdom, weight]));
 
-    subdomains.forEach(({score : sco, weight: wg}) => {
-      if (sco !== null && wg !== null){
+
+    evaluations.forEach(({subdomainId: sdId, score_sd : sco}) => {
+      const wg = poidsParSubdomain[sdId];
+
+      if (sco !== null && wg !== undefined){
         sommePonderee += sco*wg;
         sommePoids += wg;
       }
@@ -423,7 +457,7 @@ router.post("/evalDomain", async (req, res) => {
     const criticality = determinerCriticite(ScoreDomain)
     console.log(`criticité ${criticality}`)
 
-    await Domain.update({score: ScoreDomain, criticality: criticality}, {where:{id_dom: domainId}})
+    await EvaluationDomain.upsert({missionId:missionId, domainId:domainId,score_dom: ScoreDomain, criticality_dom: criticality})
 
   
     
@@ -439,18 +473,41 @@ router.post("/evalDomain", async (req, res) => {
 router.post("/evalBranch", async (req, res) => {
   try {
     
-    const {branchId} = req.body;
+    const {branchId, missionId} = req.body;
 
-    const domains = await Domain.findAll({where: {branchId: branchId}, attributes: ["id_dom","score", "weight"]})
+    const domains = await Domain.findAll({where: {branchId: branchId}, attributes: ["id_dom", "weight"]})
 
     if (domains.length === 0) {return 0} ;
+
+    const domainsList = domains.map(d => ({id_dom:d.id_dom, weight: d.weight}))
+    if (domainsList.length === 0) {return 0} ;
+
+    const domainsIds = domainsList.map(d => d.id_dom)
+    if (domainsIds.length === 0) {return 0} ;
+
+    
+
+    const evaluations = await EvaluationDomain.findAll({
+      where: {domainId: domainsIds, missionId: missionId}
+    })
+
+    if (evaluations.length === 0) {
+      return 0
+    }
+
 
     let sommePonderee = 0;
     let sommePoids = 0; 
 
+    const poidsParDomain = Object.fromEntries( domainsList.map(({id_dom: id_dom, weight: weight}) => [id_dom, weight]));
 
-    domains.forEach(({score : sco, weight: wg}) => {
-      if (sco !== null && wg !== null){
+
+
+    evaluations.forEach(({domainId: dId,score_dom : sco}) => {
+
+      const wg = poidsParDomain[dId];
+
+      if (sco !== null && wg !== undefined){
         sommePonderee += sco*wg;
         sommePoids += wg;
       }
@@ -460,7 +517,11 @@ router.post("/evalBranch", async (req, res) => {
 
     let ScoreBranch = sommePonderee / sommePoids; 
 
-    await Branch.update({score: ScoreBranch}, {where:{id_br: branchId}})
+    const criticality = determinerCriticite(ScoreBranch)
+    console.log(`criticité ${criticality}`)
+
+
+    await EvaluationBranch.upsert({missionId: missionId, branchId:branchId, score_br: ScoreBranch, criticality_br: criticality})
 
   
     

@@ -18,22 +18,22 @@ const SubDomain = sequelize.define('SubDomain', {
         key: 'id_dom'
       }
     },
-    score: { 
-      type: DataTypes.FLOAT, 
-      defaultValue: null
-    },  // Average score from control points
+    // score: { 
+    //   type: DataTypes.FLOAT, 
+    //   defaultValue: null
+    // },  // Average score from control points
     weight: { 
       type: DataTypes.FLOAT, 
       defaultValue: 0.1 
     },  // Relative importance in the domain
-    criticality: { 
-      type: DataTypes.STRING, 
-      defaultValue: null 
-    },  // Assigned based on score
-    recommendations: { 
-      type: DataTypes.TEXT, 
-      defaultValue: null 
-    },  // Aggregated recommendations
+    // criticality: { 
+    //   type: DataTypes.STRING, 
+    //   defaultValue: null 
+    // },  // Assigned based on score
+    // recommendations: { 
+    //   type: DataTypes.TEXT, 
+    //   defaultValue: null 
+    // },  // Aggregated recommendations
   });
   
   module.exports = SubDomain;

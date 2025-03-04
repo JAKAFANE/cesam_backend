@@ -8,7 +8,12 @@ const Domain = require("./domain");
 const SubDomain = require("./subdomain");
 const ControlPoint = require("./controlpoint");
 const Question = require("./questions");
-const Evaluation = require("./evaluation");
+const EvaluationAnswer = require("./evaluationAnswers");
+const EvaluationControlPoint = require("./evalCp");
+const EvaluationSubdomain = require("./evalSD");
+const EvaluationDomain = require("./evalD");
+const EvaluationBranch = require("./evalB");
+
 // const Recommendation = require("./recommandation");
 // const Report = require("./report");
 
@@ -53,7 +58,11 @@ module.exports = {
     SubDomain, 
     ControlPoint, 
     Question,
-    Evaluation,
+    EvaluationAnswer,
+    EvaluationControlPoint,
+    EvaluationSubdomain,
+    EvaluationDomain,
+    EvaluationBranch,
     // Recommendation,
     // Report,
     

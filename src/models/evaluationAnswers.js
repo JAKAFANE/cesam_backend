@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
-const Evaluation = sequelize.define("Evaluation", {
+const EvaluationAnswer = sequelize.define("EvaluationAnswer", {
   id_eval: {
     type: DataTypes.INTEGER,
     primaryKey: true,
@@ -15,8 +15,16 @@ const Evaluation = sequelize.define("Evaluation", {
     type: DataTypes.INTEGER,
     allowNull: false,
     references: {
-      model: 'questions', // Link to mission model
+      model: 'questions', 
       key: 'id_qst',
+    }
+  },
+  missionId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'missions', 
+      key: 'id_mis',
     }
   },
   answer: {
@@ -27,10 +35,10 @@ const Evaluation = sequelize.define("Evaluation", {
   indexes: [
     {
       unique: true,
-      fields: ["subjectId", "questionId"]
+      fields: ["subjectId", "questionId", "missionId"]
     }
   ]
 }
 );
 
-module.exports = Evaluation;
+module.exports = EvaluationAnswer;

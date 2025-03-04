@@ -18,22 +18,22 @@ const Domain = sequelize.define('Domain', {
         key: 'id_br'
       }
     },
-    score: { 
-      type: DataTypes.FLOAT, 
-      defaultValue: null 
-    },  // Average score from sub-domains
+    // score: { 
+    //   type: DataTypes.FLOAT, 
+    //   defaultValue: null 
+    // },  // Average score from sub-domains
     weight: { 
       type: DataTypes.FLOAT, 
       defaultValue: 0.1 
     },  // Relative importance in the branch
-    criticality: { 
-      type: DataTypes.STRING, 
-      defaultValue: null 
-    },  // Assigned based on score
-    recommendations: { 
-      type: DataTypes.TEXT, 
-      defaultValue: null 
-    },  // Aggregated recommendations
+    // criticality: { 
+    //   type: DataTypes.STRING, 
+    //   defaultValue: null 
+    // },  // Assigned based on score
+    // recommendations: { 
+    //   type: DataTypes.TEXT, 
+    //   defaultValue: null 
+    // },  // Aggregated recommendations
   });
   
   module.exports = Domain;
