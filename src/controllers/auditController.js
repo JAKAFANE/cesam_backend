@@ -1,4 +1,4 @@
-const express = require("express");
+import { resume, recommandation } from '../config/AI_model';
 const { Op } = require("sequelize");
 const { 
   Branch, 
@@ -10,11 +10,17 @@ const {
   EvaluationControlPoint,
   EvaluationSubdomain,
   EvaluationDomain,
-  EvaluationBranch
+  EvaluationBranch,
+  Recommendation
 
 } = require("../models");
+const express = require('express');
 
 const router = express.Router();
+
+
+const { resume, recommandation } = require('../config/AI_model');
+
 
 // Create a new audit branch
 router.post("/branches", async (req, res) => {
@@ -534,6 +540,56 @@ router.post("/evalBranch", async (req, res) => {
   }
 });
 
+
+router.get('/recommandation', async (req, res) => {
+  try {
+    const {controlPointId, missionId} = req.body;
+
+    const genererRecommandationCp = async (controlPointId) => {
+
+      const controlPoint = await ControlPoint.findOne({
+        where: { id_cp: controlPointId },
+        include: [
+          {model: EvaluationControlPoint},
+          {model: Question}
+        ]
+      });
+
+      if (!controlPoint || !controlPoint.EvaluationControlPoint ) {
+        throw new Error('Point de contrôle ou évaluation introuvable.');
+      }
+      console.log(controlPoint)
+    
+      const nomCp = controlPoint.name_cp;
+      console.log(nomCp)
+      const scoreCp = controlPoint.EvaluationControlPoint.score_cp;
+      console.log(scoreCp)
+      const criticiteCp = controlPoint.EvaluationControlPoint.criticality_cp;
+      console.log(criticiteCp)
+
+      const questions = await Question.findAll({where: {controlPointId: controlPointId}, attributes: ["id_qst","questionText" ]});
+      const questionsTexts = questions.map(q => q.questionText);
+      console.log(questionsTexts)
+      //const questions = controlPoint.Question.map(q.questionText)
+      
+      const resumeText = await resume(questionsTexts)
+
+      const recommandations = await recommandation(nomCp, scoreCp, criticiteCp, resumeText )
+
+      return recommandations;
+    };
+
+
+    const recommandationsCp = await genererRecommandationCp(controlPointId);
+
+    await Recommendation.upsert({missionId: missionId, controlPointId: controlPointId, recommndationText: recommandationsCp})
+
+    res.status(200).json({ success: true, recommandationsCp });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Erreur lors de la génération des recommandations" });
+  }
+});
 
 // /**
 //  * @route POST /api/audit/submit-answers

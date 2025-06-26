@@ -13,8 +13,7 @@ const EvaluationControlPoint = require("./evalCp");
 const EvaluationSubdomain = require("./evalSD");
 const EvaluationDomain = require("./evalD");
 const EvaluationBranch = require("./evalB");
-
-// const Recommendation = require("./recommandation");
+const Recommendation = require("./recommandation");
 // const Report = require("./report");
 
 
@@ -39,13 +38,35 @@ Mission.hasMany(Auditor, {
     as: "auditors", // Alias for easier querying
     onDelete: "SET NULL", // Handle cascading behavior
     onUpdate: "CASCADE",
-  });
+});
   
   // An auditor belongs to one mission
   Auditor.belongsTo(Mission, {
     foreignKey: "missionId",
     as: "mission",
   });
+
+  ControlPoint.hasOne(EvaluationControlPoint, {
+  foreignKey: 'controlPointId', 
+  sourceKey: 'id_cp'
+});
+
+EvaluationControlPoint.belongsTo(ControlPoint, {
+  foreignKey: 'controlPointId',
+  targetKey: 'id_cp'
+});
+
+ControlPoint.hasMany(Question, {
+  foreignKey: 'controlPointId',
+  sourceKey: 'id_cp'
+});
+
+Question.belongsTo(ControlPoint, {
+  foreignKey: 'controlPointId',
+  targetKey: 'id_cp'
+});
+
+
 
 module.exports = {
     initDB, 
@@ -63,7 +84,7 @@ module.exports = {
     EvaluationSubdomain,
     EvaluationDomain,
     EvaluationBranch,
-    // Recommendation,
+    Recommendation,
     // Report,
     
 };
