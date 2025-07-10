@@ -1,3 +1,6 @@
+require('dotenv').config();
+
+
 const express = require('express');
 const { initDB } = require("./src/models")
 const auditorRoutes = require("./src/controllers/auditorController");

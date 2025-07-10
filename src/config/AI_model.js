@@ -1,11 +1,11 @@
-import { GoogleGenAI } from "@google/genai";
+const { GoogleGenAI } = require("@google/genai") ;
 
 
 const ai = new GoogleGenAI({ apiKey: "AIzaSyC0L0xP0CCSw3dK0otVAU5TYmANhyicELo" });
 
 
 const resume = async (questions) => {
-  const corpus = "";
+  let corpus = "";
   questions.forEach((i) =>{
     corpus += " "+ i + ";"
   })
@@ -15,7 +15,10 @@ const resume = async (questions) => {
       model: "gemini-2.0-flash",
       contents: resumeQuestions,
     });
-  const resumeText = await response.text();
+  
+  console.log('response from AI:', response.text )
+  const resumeText =  response.text;
+  // console.log('resume result:', resumeText )
   return resumeText;
 }
 
@@ -32,10 +35,12 @@ const recommandation = async(nomCp, scoreCp, criticiteCp, resumeText) => {
       model: "gemini-2.0-flash",
       contents: prompt,
     });
-  const recoText = await recoResponse.text();
-  console.log(recoText);
+
+  console.log('recoResponse from AI:', recoResponse.text )
+  const recoText = recoResponse.text;
+  // console.log('recoText from AI:',recoText);
   return recoText ;
 }
 
 
-export { resume, recommandation };
+module.exports =  { resume, recommandation };

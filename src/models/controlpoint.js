@@ -22,14 +22,14 @@ const ControlPoint = sequelize.define('ControlPoint', {
       type: DataTypes.FLOAT,
       allowNull: false 
     },
-    // score_cp: {
-    //   type: DataTypes.FLOAT,
-    //   allowNull: true // Will be filled based on evaluation
-    // },
-    // criticalityLevel: {
-    //   type: DataTypes.STRING,
-    //   allowNull: true // Will be filled based on evaluation
-    // },
+    evaluationType: {
+      type: DataTypes.ENUM('manuelle', 'automatique', 'hybride'),
+      defaultValue: 'manuelle' // Will be filled based on evaluation
+    },
+    outilEvaluation: {
+      type: DataTypes.STRING,
+      allowNull: true // Will be filled based on evaluation
+    },
   
   });
   

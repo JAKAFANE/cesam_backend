@@ -1,5 +1,4 @@
-import { resume, recommandation } from '../config/AI_model';
-const { Op } = require("sequelize");
+
 const { 
   Branch, 
   Domain, 
@@ -14,6 +13,8 @@ const {
   Recommendation
 
 } = require("../models");
+
+const {Op} = require('sequelize')
 const express = require('express');
 
 const router = express.Router();
@@ -21,6 +22,9 @@ const router = express.Router();
 
 const { resume, recommandation } = require('../config/AI_model');
 
+const mobsfService = require('../services/mobsfService');
+const nessusService = require('../services/nessusService');
+const zapService = require('../services/zapService');
 
 // Create a new audit branch
 router.post("/branches", async (req, res) => {
@@ -540,94 +544,138 @@ router.post("/evalBranch", async (req, res) => {
   }
 });
 
+function sleep(ms){
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
-router.get('/recommandation', async (req, res) => {
+
+router.get('/recommandations', async (_req, res) => {
   try {
-    const {controlPointId, missionId} = req.body;
 
-    const genererRecommandationCp = async (controlPointId) => {
+    const nonComformes = await EvaluationControlPoint.findAll({
+      where: { score_cp: { [Op.lt]: 0.60}},
+      include: [ControlPoint]
+    });
 
-      const controlPoint = await ControlPoint.findOne({
-        where: { id_cp: controlPointId },
-        include: [
-          {model: EvaluationControlPoint},
-          {model: Question}
-        ]
-      });
+    const resultats = [];
 
-      if (!controlPoint || !controlPoint.EvaluationControlPoint ) {
-        throw new Error('Point de contrôle ou évaluation introuvable.');
+    
+    for (const evaluation of nonComformes){
+      const controlPoint = evaluation.ControlPoint;
+      if (!controlPoint ) {
+      throw new Error('Point de contrôle ou évaluation introuvable.');
       }
       console.log(controlPoint)
-    
+      
+      const questions = await Question.findAll({ where: { controlPointId: controlPoint.id_cp}, attributes: ["id_qst","questionText" ]});
       const nomCp = controlPoint.name_cp;
       console.log(nomCp)
-      const scoreCp = controlPoint.EvaluationControlPoint.score_cp;
+      const scoreCp = evaluation.score_cp;
       console.log(scoreCp)
-      const criticiteCp = controlPoint.EvaluationControlPoint.criticality_cp;
+      const criticiteCp = evaluation.criticality_cp;
       console.log(criticiteCp)
+      const questionsTexts = questions.map(q => q.questionText)
 
-      const questions = await Question.findAll({where: {controlPointId: controlPointId}, attributes: ["id_qst","questionText" ]});
-      const questionsTexts = questions.map(q => q.questionText);
-      console.log(questionsTexts)
-      //const questions = controlPoint.Question.map(q.questionText)
+      try {
+        const resumeText = await resume(questionsTexts);
+        const reco = await recommandation(nomCp, scoreCp, criticiteCp, resumeText);
+
+        console.log(` Recommandations pour ${nomCp} :\n${reco}`);
+
+        await Recommendation.upsert({missionId: evaluation.missionId, controlPointId: controlPoint.id_cp, recommendationText: reco})
+
+        resultats.push({
+          pointDeControle: nomCp,
+          score: scoreCp,
+          criticite: criticiteCp,
+          recommandations:reco
+        });
+
+        await sleep(3000);
+      }catch (error) {
+         console.error(` Erreur IA pour le point ${nomCp} :`, error.message);
+         resultats.push({
+          pointDeControle: nomCp,
+          erreur: error.message
+         })
+      }
+
       
-      const resumeText = await resume(questionsTexts)
+    }
 
-      const recommandations = await recommandation(nomCp, scoreCp, criticiteCp, resumeText )
+    //const {controlPointId, missionId} = req.body;
 
-      return recommandations;
-    };
+    // const genererRecommandationCp = async (controlPointId) => {
+
+    //   const controlPoint = await ControlPoint.findOne({
+    //     where: { id_cp: controlPointId },
+    //     include: [
+    //       {model: EvaluationControlPoint},
+    //       {model: Question}
+    //     ]
+    //   });
+
+    //   if (!controlPoint || !controlPoint.EvaluationControlPoint ) {
+    //     throw new Error('Point de contrôle ou évaluation introuvable.');
+    //   }
+    //   console.log(controlPoint)
+    
+    //   const nomCp = controlPoint.name_cp;
+    //   console.log(nomCp)
+    //   const scoreCp = controlPoint.EvaluationControlPoint.score_cp;
+    //   console.log(scoreCp)
+    //   const criticiteCp = controlPoint.EvaluationControlPoint.criticality_cp;
+    //   console.log(criticiteCp)
+
+    //   const questions = await Question.findAll({where: {controlPointId: controlPointId}, attributes: ["id_qst","questionText" ]});
+    //   const questionsTexts = questions.map(q => q.questionText);
+    //   console.log(questionsTexts)
+    //   //const questions = controlPoint.Question.map(q.questionText)
+      
+    //   const resumeText = await resume(questionsTexts)
+
+    //   const recommandations = await recommandation(nomCp, scoreCp, criticiteCp, resumeText )
+
+    //   return recommandations;
+    // };
 
 
-    const recommandationsCp = await genererRecommandationCp(controlPointId);
+    // const recommandationsCp = await genererRecommandationCp(controlPointId);
 
-    await Recommendation.upsert({missionId: missionId, controlPointId: controlPointId, recommndationText: recommandationsCp})
 
-    res.status(200).json({ success: true, recommandationsCp });
+    res.status(200).json({ 
+      success: true, 
+      total: resultats.length,
+      recommandations: resultats
+    });
   } catch (error) {
-    console.error(error);
+    console.error("Erreur serveur:", error.message);
     res.status(500).json({ success: false, message: "Erreur lors de la génération des recommandations" });
   }
 });
 
-// /**
-//  * @route POST /api/audit/submit-answers
-//  * @desc Submit answers for an evaluation
-//  */
-// router.post("/submit-answers", async (req, res) => {
-//   try {
-//     const { evaluationId, answers } = req.body; // Answers is an array [{ questionId, answer }]
 
-//     // Save each answer
-//     const answerRecords = await Promise.all(
-//       answers.map((ans) =>
-//         EvaluationAnswer.create({
-//           evaluationId: evaluationId,
-//           questionId: ans.questionId,
-//           answer: ans.answer,
-//         })
-//       )
-//     );
-
-//     // Compute score (yes = 1, no = 0)
-//     const totalQuestions = answers.length;
-//     const yesCount = answers.filter((ans) => ans.answer === true).length;
-//     const score = totalQuestions > 0 ? yesCount / totalQuestions : 0;
-
-//     // Update evaluation score
-//     await Evaluation.update({ score }, { where: { id_eval: evaluationId } });
-
-//     return res.status(200).json({
-//       message: "Answers submitted successfully",
-//       score,
-//       answers: answerRecords,
-//     });
-//   } catch (error) {
-//     console.error("Error submitting answers:", error);
-//     return res.status(500).json({ error: "Internal server error" });
-//   }
-// });
+router.post("/scan", async (req, res) => {
+  try {
+    const { target } = req.body;
+    // Lancer les scans en parallèle
+    const [mobsf, nessus, zap] = await Promise.all([
+      mobsfService.scan(target),
+      nessusService.scan(target),
+      zapService.scan(target)
+    ]);
+    // Agréger les résultats, calculer score et recommandations
+    // ... logique métier ici ...
+    res.json({ mobsf, nessus, zap });
+    return res.status(200).json({
+      message: "Success",
+      
+    });
+  } catch (error) {
+    console.error("Error :", error);
+    return res.status(500).json({ error: error.message });
+  }
+});
 
 // /**
 //  * @route POST /api/audit/finalize-evaluation

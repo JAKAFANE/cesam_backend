@@ -14,6 +14,7 @@ const EvaluationSubdomain = require("./evalSD");
 const EvaluationDomain = require("./evalD");
 const EvaluationBranch = require("./evalB");
 const Recommendation = require("./recommandation");
+const ScanAutomatique = require("./scanAutomatique")
 // const Report = require("./report");
 
 
@@ -66,6 +67,14 @@ Question.belongsTo(ControlPoint, {
   targetKey: 'id_cp'
 });
 
+ControlPoint.hasMany(ScanAutomatique, {
+  foreignKey: 'controlPointId'
+});
+ScanAutomatique.belongsTo(ControlPoint, {
+  foreignKey: 'controlPointId'
+});
+
+
 
 
 module.exports = {
@@ -85,6 +94,7 @@ module.exports = {
     EvaluationDomain,
     EvaluationBranch,
     Recommendation,
+    ScanAutomatique
     // Report,
     
 };
